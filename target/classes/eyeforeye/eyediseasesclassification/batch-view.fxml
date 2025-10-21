@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" 
+            fx:controller="eyeforeye.eyediseasesclassification.BatchController"
+            prefWidth="900" prefHeight="600">
+    
+    <!-- Top: Title & Controls -->
+    <top>
+        <VBox spacing="10" style="-fx-background-color: #f5f5f5; -fx-padding: 15;">
+            <Label text="Prediksi Batch - Multiple Images" 
+                   style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+            
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Button fx:id="uploadBatchButton" text="📁 Upload Gambar (Multiple)" 
+                        onAction="#onUploadBatchClicked" prefWidth="200"/>
+                <Button fx:id="predictBatchButton" text="🔮 Prediksi Batch" 
+                        onAction="#onPredictBatchClicked" prefWidth="150"
+                        style="-fx-background-color: #4CAF50; -fx-text-fill: white;"/>
+                <Button fx:id="clearButton" text="🗑️ Clear" 
+                        onAction="#onClearClicked" prefWidth="100"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="summaryLabel" text="Belum ada gambar" 
+                       style="-fx-font-weight: bold;"/>
+            </HBox>
+            
+            <ProgressBar fx:id="progressBar" prefWidth="Infinity" progress="0"/>
+        </VBox>
+    </top>
+    
+    <!-- Center: Table -->
+    <center>
+        <VBox spacing="5" style="-fx-padding: 10;">
+            <Label text="Hasil Prediksi:" style="-fx-font-weight: bold;"/>
+            
+            <TableView fx:id="resultTable" VBox.vgrow="ALWAYS">
+                <columns>
+                    <TableColumn fx:id="fileNameColumn" text="Nama File" prefWidth="200"/>
+                    <TableColumn fx:id="predictedClassColumn" text="Prediksi" prefWidth="250"/>
+                    <TableColumn fx:id="confidenceColumn" text="Confidence" prefWidth="100"/>
+                    <TableColumn fx:id="statusColumn" text="Status" prefWidth="100"/>
+                </columns>
+                <placeholder>
+                    <Label text="Belum ada data. Upload gambar untuk memulai."/>
+                </placeholder>
+            </TableView>
+        </VBox>
+    </center>
+    
+    <!-- Right: Image Preview & Detail -->
+    <right>
+        <VBox spacing="10" style="-fx-padding: 10; -fx-background-color: #fafafa;" 
+              prefWidth="300">
+            <Label text="Preview &amp; Detail:" style="-fx-font-weight: bold;"/>
+            
+            <ImageView fx:id="selectedImageView" fitWidth="280" fitHeight="280" 
+                       preserveRatio="true" 
+                       style="-fx-background-color: #e0e0e0;"/>
+            
+            <Separator/>
+            
+            <Label fx:id="detailLabel" wrapText="true" 
+                   style="-fx-font-size: 11px;"
+                   text="Klik baris tabel untuk melihat detail"/>
+        </VBox>
+    </right>
+    
+</BorderPane>
