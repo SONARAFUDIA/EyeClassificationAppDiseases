@@ -29,12 +29,6 @@ public class ModelPredictor {
             "Retinis Pigmentosa"
     };
 
-    // Threshold untuk validasi
-    private static final float CONFIDENCE_THRESHOLD = 0.50f; // 50%
-    private static final float LOW_CONFIDENCE_THRESHOLD = 0.30f; // 30%
-    
-    
-
     public ModelPredictor(String modelPath) {
         try {
             System.out.println("🔹 Memuat model TensorFlow dari: " + modelPath);
@@ -47,23 +41,45 @@ public class ModelPredictor {
         }
     }
 
-    public String predict(File imageFile) {
+    /**
+     * Prediksi dengan hasil lengkap (semua probabilitas kelas)
+     */
+    public PredictionResult predictFull(File imageFile) {
         if (model == null) {
-            return "❌ Model belum dimuat!";
+            return new PredictionResult(imageFile, "Model belum dimuat");
         }
 
         TFloat32 inputTensor = null;
         
         try {
-            BufferedImage img = ImageIO.read(imageFile);
-            if (img == null) {
-                return "❌ Gagal membaca gambar!";
+            // ==========================================
+            // STEP 1: OOD Detection (Out-of-Distribution)
+            // ==========================================
+            System.out.println("🔍 Running OOD Detection...");
+            OODDetector.OODResult oodResult = OODDetector.detectOOD(imageFile);
+            
+            if (!oodResult.isValid()) {
+                System.out.println("❌ OOD Detection: INVALID - " + oodResult.getMessage());
+                return new PredictionResult(imageFile, 
+                    "❌ GAMBAR TIDAK VALID (OOD Score: " + oodResult.getScorePercent() + ")\n\n" +
+                    oodResult.getMessage() + "\n" +
+                    "Silakan upload gambar mata fundus yang benar.");
             }
             
-            // Validasi gambar
-            String validationError = validateImage(img);
-            if (validationError != null) {
-                return validationError;
+            System.out.println("✅ OOD Detection: VALID - Score: " + oodResult.getScorePercent());
+            
+            // ==========================================
+            // STEP 2: Model Prediction
+            // ==========================================
+            BufferedImage img = ImageIO.read(imageFile);
+            if (img == null) {
+                return new PredictionResult(imageFile, "Gagal membaca gambar");
+            }
+            
+            // Basic validation
+            if (img.getWidth() < 50 || img.getHeight() < 50) {
+                return new PredictionResult(imageFile, 
+                    "Resolusi gambar terlalu kecil (< 50x50 pixels)");
             }
             
             BufferedImage resized = resizeImage(img, 224, 224);
@@ -79,121 +95,66 @@ public class ModelPredictor {
             float[][] output = new float[1][CLASSES.length];
             ((TFloat32) result).read(DataBuffers.of(output[0]));
 
-            int predictedIndex = argMax(output[0]);
-            float confidence = output[0][predictedIndex];
-            String predictedClass = CLASSES[predictedIndex];
+            // Copy probabilities
+            float[] probabilities = new float[CLASSES.length];
+            System.arraycopy(output[0], 0, probabilities, 0, CLASSES.length);
             
             result.close();
 
-            // Validasi confidence
-            if (confidence < LOW_CONFIDENCE_THRESHOLD) {
-                return "❌ GAMBAR TIDAK VALID\n\n" +
-                       "Gambar ini kemungkinan besar BUKAN gambar mata fundus.\n" +
-                       "Confidence sangat rendah: " + String.format("%.2f%%", confidence * 100) + "\n\n" +
-                       "Silakan upload gambar mata fundus yang benar.";
-            } else if (confidence < CONFIDENCE_THRESHOLD) {
-                return "⚠️ PREDIKSI TIDAK DAPAT DIANDALKAN\n\n" +
-                       "Prediksi: " + predictedClass + "\n" +
-                       "Confidence: " + String.format("%.2f%%", confidence * 100) + "\n\n" +
-                       "⚠️ Confidence terlalu rendah!\n" +
-                       "Kemungkinan:\n" +
-                       "- Gambar bukan mata fundus yang valid\n" +
-                       "- Kualitas gambar buruk\n" +
-                       "- Pencahayaan tidak sesuai\n\n" +
-                       "Silakan gunakan gambar mata fundus yang lebih jelas.";
-            }
-
-            return String.format("✅ PREDIKSI VALID\n\nPrediksi: %s\nConfidence: %.2f%%", 
-                               predictedClass, confidence * 100);
+            // ==========================================
+            // STEP 3: Return result (OOD sudah validasi)
+            // ==========================================
+            return new PredictionResult(imageFile, CLASSES, probabilities);
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Error saat prediksi: " + e.getMessage();
+            return new PredictionResult(imageFile, "Error: " + e.getMessage());
         } finally {
             if (inputTensor != null) {
                 inputTensor.close();
             }
         }
+    }
+
+    public String predict(File imageFile) {
+        PredictionResult result = predictFull(imageFile);
+        
+        if (!result.isSuccess()) {
+            return "❌ " + result.getErrorMessage();
+        }
+        
+        float confidence = result.getConfidence();
+        String predictedClass = result.getPredictedClass();
+        
+        // Build detailed prediction string with top 3 predictions
+        StringBuilder sb = new StringBuilder();
+        sb.append("✅ PREDIKSI VALID\n\n");
+        sb.append(String.format("Prediksi Utama: %s\nConfidence: %.2f%%\n\n", 
+                              predictedClass, confidence * 100));
+        
+        sb.append("Top 3 Prediksi:\n");
+        PredictionResult.ClassProbability[] topPredictions = result.getTopNPredictions(3);
+        for (int i = 0; i < topPredictions.length; i++) {
+            sb.append(String.format("%d. %s: %.2f%%\n", 
+                i + 1, 
+                topPredictions[i].getClassName(), 
+                topPredictions[i].getProbability() * 100));
+        }
+
+        return sb.toString();
     }
 
     public BatchResult predictDetailed(File imageFile) {
-        if (model == null) {
-            return new BatchResult(imageFile, "Model belum dimuat");
-        }
-
-        TFloat32 inputTensor = null;
+        PredictionResult result = predictFull(imageFile);
         
-        try {
-            BufferedImage img = ImageIO.read(imageFile);
-            if (img == null) {
-                return new BatchResult(imageFile, "Gagal membaca gambar");
-            }
-            
-            // Validasi gambar
-            String validationError = validateImage(img);
-            if (validationError != null) {
-                return new BatchResult(imageFile, validationError);
-            }
-            
-            BufferedImage resized = resizeImage(img, 224, 224);
-            inputTensor = imageToTensorRGB(resized);
-
-            Tensor result = model.session()
-                    .runner()
-                    .feed("serve_keras_tensor", inputTensor)
-                    .fetch("StatefulPartitionedCall")
-                    .run()
-                    .get(0);
-
-            float[][] output = new float[1][CLASSES.length];
-            ((TFloat32) result).read(DataBuffers.of(output[0]));
-
-            int predictedIndex = argMax(output[0]);
-            float confidence = output[0][predictedIndex];
-            String predictedClass = CLASSES[predictedIndex];
-            
-            result.close();
-
-            // Validasi confidence
-            if (confidence < LOW_CONFIDENCE_THRESHOLD) {
-                return new BatchResult(imageFile, "TIDAK VALID (Confidence: " + 
-                                     String.format("%.2f%%", confidence * 100) + " - Bukan gambar mata)");
-            } else if (confidence < CONFIDENCE_THRESHOLD) {
-                return new BatchResult(imageFile, predictedClass + " (⚠️ Low Confidence: " + 
-                                     String.format("%.2f%%)", confidence * 100));
-            }
-
-            return new BatchResult(imageFile, predictedClass, confidence);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return new BatchResult(imageFile, "Error: " + e.getMessage());
-        } finally {
-            if (inputTensor != null) {
-                inputTensor.close();
-            }
-        }
-    }
-    
-    /**
-     * Validasi awal gambar (misal: dimensi,
-     * apakah gambar terlalu gelap/terang, dll.)
-     *
-     * @param img Gambar yang akan divalidasi
-     * @return String error jika tidak valid, atau null jika valid
-     */
-    private String validateImage(BufferedImage img) {
-        // Implementasi validasi gambar dasar
-        // Model ini mengharapkan gambar mata, yang biasanya tidak super kecil.
-        if (img.getWidth() < 50 || img.getHeight() < 50) {
-            return "❌ GAMBAR TIDAK VALID\n\nResolusi gambar terlalu kecil (< 50x50 pixels).";
+        if (!result.isSuccess()) {
+            return new BatchResult(imageFile, result.getErrorMessage());
         }
         
-        // TODO: Validasi yang lebih canggih bisa ditambahkan di sini
-        // (misal: cek histogram untuk gambar yang terlalu gelap/terang)
-        
-        // Lolos validasi dasar
-        return null;
+        float confidence = result.getConfidence();
+        String predictedClass = result.getPredictedClass();
+
+        return new BatchResult(imageFile, predictedClass, confidence);
     }
 
     private static BufferedImage resizeImage(BufferedImage original, int width, int height) {
@@ -254,3 +215,31 @@ public class ModelPredictor {
         }
     }
 }
+//```
+//
+//**Keunggulan OOD Detection ini:**
+//
+//✅ **Multi-factor Analysis**: Menganalisis 4 aspek berbeda:
+//   - **Entropy**: Kompleksitas gambar
+//   - **Color Variance**: Variasi warna
+//   - **Circular Pattern**: Pola circular khas mata fundus
+//   - **Red Channel Dominance**: Dominasi channel merah
+//
+//✅ **Scoring System**: Score 0.0 - 1.0 berdasarkan berapa banyak checks yang passed
+//
+//✅ **Detailed Feedback**: Memberikan alasan spesifik kenapa gambar tidak valid
+//
+//✅ **Lebih Robust**: Tidak bergantung pada confidence threshold model saja
+//
+//**Contoh Output:**
+//
+//Untuk gambar non-fundus (misal: foto kucing):
+//```
+//❌ GAMBAR TIDAK VALID (OOD Score: 25.0%)
+//
+//Gambar TIDAK VALID sebagai fundus image:
+//- Variasi warna tidak sesuai dengan mata fundus
+//- Tidak ditemukan pola circular (karakteristik mata)
+//- Dominasi channel merah tidak sesuai fundus image
+//
+//Silakan upload gambar mata fundus yang benar.

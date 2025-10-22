@@ -3,11 +3,15 @@ package eyeforeye.eyediseasesclassification;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.stage.FileChooser;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import java.awt.image.BufferedImage;
-
 
 import java.io.File;
 
@@ -23,22 +27,43 @@ public class MainController {
     private Button uploadButton, predictButton, showGradCAMButton;
     
     @FXML
-    private Label accuracyLabel, precisionLabel, recallLabel, f1Label;
+    private Label confidenceLabel;  // Hanya confidence
     
     @FXML
     private ImageView gradcamImageView;
+    
+    @FXML
+    private TableView<ClassProbabilityDisplay> probabilityTable;
+    
+    @FXML
+    private TableColumn<ClassProbabilityDisplay, String> classNameColumn;
+    
+    @FXML
+    private TableColumn<ClassProbabilityDisplay, String> probabilityColumn;
 
     private File selectedFile;
     private ModelPredictor modelPredictor;
     private File lastDirectory;
-    private int lastPredictedClass = -1; // Store last predicted class index for Grad-CAM
+    private int lastPredictedClass = -1;
+    private ObservableList<ClassProbabilityDisplay> probabilityData;
 
     @FXML
     public void initialize() {
         predictionLabel.setText("Belum ada gambar yang diunggah.");
         
-        // Set initial metrics (placeholder)
-        updateMetricsDisplay(0, 0, 0, 0);
+        // Setup probability table
+        if (probabilityTable != null) {
+            classNameColumn.setCellValueFactory(new PropertyValueFactory<>("className"));
+            probabilityColumn.setCellValueFactory(new PropertyValueFactory<>("probability"));
+            
+            probabilityData = FXCollections.observableArrayList();
+            probabilityTable.setItems(probabilityData);
+        }
+        
+        // Set initial confidence display
+        if (confidenceLabel != null) {
+            confidenceLabel.setText("0.00%");
+        }
         
         // Disable Grad-CAM button initially
         if (showGradCAMButton != null) {
@@ -47,7 +72,6 @@ public class MainController {
 
         try {
             // Inisialisasi model TensorFlow SavedModel
-            // PASTIKAN folder saved_model ada di root project!
             modelPredictor = new ModelPredictor("saved_model");
         } catch (Exception e) {
             predictionLabel.setText("❌ Gagal memuat model: " + e.getMessage());
@@ -63,19 +87,27 @@ public class MainController {
                 new FileChooser.ExtensionFilter("File Gambar", "*.png", "*.jpg", "*.jpeg")
         );
 
-        // Set direktori awal ke direktori terakhir (jika ada)
         if (lastDirectory != null && lastDirectory.exists()) {
             fileChooser.setInitialDirectory(lastDirectory);
         }
 
         selectedFile = fileChooser.showOpenDialog(uploadButton.getScene().getWindow());
         if (selectedFile != null) {
-            // Simpan direktori dari file yang dipilih
             lastDirectory = selectedFile.getParentFile();
             
             Image image = new Image(selectedFile.toURI().toString());
             imageView.setImage(image);
             predictionLabel.setText("✅ Gambar berhasil diunggah!\nKlik 'Prediksi Hasil' untuk analisis.");
+            
+            // Clear previous data
+            if (probabilityData != null) {
+                probabilityData.clear();
+            }
+            
+            // Reset confidence
+            if (confidenceLabel != null) {
+                confidenceLabel.setText("0.00%");
+            }
         }
     }
 
@@ -93,37 +125,51 @@ public class MainController {
 
         // Tampilkan loading indicator
         predictionLabel.setText("🔄 Memproses prediksi...");
-        updateMetricsDisplay(0, 0, 0, 0); // Reset metrics
+        if (confidenceLabel != null) {
+            confidenceLabel.setText("0.00%");
+        }
+        
+        if (probabilityData != null) {
+            probabilityData.clear();
+        }
         
         // Clear Grad-CAM
         if (gradcamImageView != null) {
             gradcamImageView.setImage(null);
         }
         
-        // Jalankan prediksi di thread terpisah agar UI tidak freeze
+        // Jalankan prediksi di thread terpisah
         new Thread(() -> {
-            BatchResult result = modelPredictor.predictDetailed(selectedFile);
+            PredictionResult result = modelPredictor.predictFull(selectedFile);
             
             // Update UI di JavaFX thread
             javafx.application.Platform.runLater(() -> {
                 if (result.isSuccess()) {
+                    // Update main prediction label
                     predictionLabel.setText(String.format(
-                        "✅ PREDIKSI VALID\n\nPrediksi: %s\nConfidence: %.2f%%", 
-                        result.getPredictedClass(), result.getConfidence() * 100
+                        "✅ PREDIKSI VALID\n\n" +
+                        "Prediksi Utama: %s\n\n" +
+                        "📊 Lihat tabel untuk probabilitas semua kelas", 
+                        result.getPredictedClass()
                     ));
                     
-                    // Update metrics
-                    estimateMetrics(result.getConfidence());
+                    // Update confidence label
+                    if (confidenceLabel != null) {
+                        confidenceLabel.setText(String.format("%.2f%%", result.getConfidence() * 100));
+                    }
+                    
+                    // Update probability table with ALL classes
+                    updateProbabilityTable(result);
                     
                     // Store predicted class for Grad-CAM
-                    lastPredictedClass = getPredictedClassIndex(result.getPredictedClass());
+                    lastPredictedClass = result.getPredictedClassIndex();
                     
                     // Enable Grad-CAM button
                     if (showGradCAMButton != null) {
                         showGradCAMButton.setDisable(false);
                     }
                 } else {
-                    predictionLabel.setText(result.getErrorMessage());
+                    predictionLabel.setText("❌ " + result.getErrorMessage());
                     if (showGradCAMButton != null) {
                         showGradCAMButton.setDisable(true);
                     }
@@ -132,13 +178,33 @@ public class MainController {
         }).start();
     }
     
+    /**
+     * Update tabel probabilitas dengan semua kelas
+     */
+    private void updateProbabilityTable(PredictionResult result) {
+        if (probabilityData == null) return;
+        
+        probabilityData.clear();
+        
+        // Get all predictions sorted by probability
+        PredictionResult.ClassProbability[] allPredictions = result.getAllPredictions();
+        
+        for (PredictionResult.ClassProbability cp : allPredictions) {
+            probabilityData.add(new ClassProbabilityDisplay(
+                cp.getClassName(),
+                cp.getProbabilityPercent(),
+                cp.getProbability()
+            ));
+        }
+    }
+    
     @FXML
     private void onShowGradCAMClicked() {
         if (selectedFile == null || lastPredictedClass < 0) {
             return;
         }
         
-        predictionLabel.setText("🔄 Generating Grad-CAM visualization...");
+        predictionLabel.setText(predictionLabel.getText() + "\n\n🔄 Generating Grad-CAM visualization...");
         
         new Thread(() -> {
             try {
@@ -154,41 +220,23 @@ public class MainController {
                         javafx.scene.image.Image fxImage = convertToFxImage(heatmap);
                         gradcamImageView.setImage(fxImage);
                     }
-                    predictionLabel.setText(predictionLabel.getText() + "\n\n🔥 Grad-CAM visualization generated!");
+                    
+                    String currentText = predictionLabel.getText();
+                    if (!currentText.contains("Grad-CAM visualization generated")) {
+                        predictionLabel.setText(currentText.replace(
+                            "🔄 Generating Grad-CAM visualization...", 
+                            "🔥 Grad-CAM visualization generated!"));
+                    }
                 });
                 
             } catch (Exception e) {
                 e.printStackTrace();
                 javafx.application.Platform.runLater(() -> {
-                    predictionLabel.setText(predictionLabel.getText() + "\n\n❌ Grad-CAM generation failed: " + e.getMessage());
+                    predictionLabel.setText(predictionLabel.getText() + 
+                        "\n\n❌ Grad-CAM generation failed: " + e.getMessage());
                 });
             }
         }).start();
-    }
-    
-    /**
-     * Get class index from class name
-     */
-    private int getPredictedClassIndex(String className) {
-        String[] classes = {
-            "Central Serous Chorioretinopathy",
-            "Diabetes Retinopathy",
-            "Disc Edema",
-            "Glaucoma",
-            "Healthy",
-            "Macular Scar",
-            "Myopia",
-            "Pterygium",
-            "Retinal Detachment",
-            "Retinis Pigmentosa"
-        };
-        
-        for (int i = 0; i < classes.length; i++) {
-            if (classes[i].equals(className)) {
-                return i;
-            }
-        }
-        return -1;
     }
     
     /**
@@ -216,28 +264,29 @@ public class MainController {
     }
     
     /**
-     * Update tampilan metrics
+     * Inner class untuk display di TableView
      */
-    private void updateMetricsDisplay(double accuracy, double precision, double recall, double f1) {
-        accuracyLabel.setText(String.format("%.2f%%", accuracy * 100));
-        precisionLabel.setText(String.format("%.2f%%", precision * 100));
-        recallLabel.setText(String.format("%.2f%%", recall * 100));
-        f1Label.setText(String.format("%.2f%%", f1 * 100));
-    }
-    
-    /**
-     * Hitung metrics berdasarkan confidence score
-     * Ini adalah estimasi sederhana, untuk metrics real butuh ground truth labels
-     */
-    private void estimateMetrics(float confidence) {
-        // Estimasi sederhana berdasarkan confidence
-        // Note: Ini bukan metrics real! Untuk metrics real butuh test dataset dengan ground truth
+    public static class ClassProbabilityDisplay {
+        private final String className;
+        private final String probability;
+        private final float probabilityValue;
         
-        double accuracy = confidence * 0.95; // Estimasi accuracy
-        double precision = confidence * 0.93; // Estimasi precision
-        double recall = confidence * 0.90; // Estimasi recall
-        double f1 = 2 * (precision * recall) / (precision + recall); // F1 Score
+        public ClassProbabilityDisplay(String className, String probability, float probabilityValue) {
+            this.className = className;
+            this.probability = probability;
+            this.probabilityValue = probabilityValue;
+        }
         
-        updateMetricsDisplay(accuracy, precision, recall, f1);
+        public String getClassName() {
+            return className;
+        }
+        
+        public String getProbability() {
+            return probability;
+        }
+        
+        public float getProbabilityValue() {
+            return probabilityValue;
+        }
     }
 }
