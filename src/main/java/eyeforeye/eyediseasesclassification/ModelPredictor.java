@@ -54,19 +54,8 @@ public class ModelPredictor {
         try {
             // ==========================================
             // STEP 1: OOD Detection (Out-of-Distribution)
+            // BLOK INI TELAH DIHAPUS
             // ==========================================
-            System.out.println("🔍 Running OOD Detection...");
-            OODDetector.OODResult oodResult = OODDetector.detectOOD(imageFile);
-            
-            if (!oodResult.isValid()) {
-                System.out.println("❌ OOD Detection: INVALID - " + oodResult.getMessage());
-                return new PredictionResult(imageFile, 
-                    "❌ GAMBAR TIDAK VALID (OOD Score: " + oodResult.getScorePercent() + ")\n\n" +
-                    oodResult.getMessage() + "\n" +
-                    "Silakan upload gambar mata fundus yang benar.");
-            }
-            
-            System.out.println("✅ OOD Detection: VALID - Score: " + oodResult.getScorePercent());
             
             // ==========================================
             // STEP 2: Model Prediction
@@ -102,7 +91,7 @@ public class ModelPredictor {
             result.close();
 
             // ==========================================
-            // STEP 3: Return result (OOD sudah validasi)
+            // STEP 3: Return result
             // ==========================================
             return new PredictionResult(imageFile, CLASSES, probabilities);
 
@@ -215,31 +204,3 @@ public class ModelPredictor {
         }
     }
 }
-//```
-//
-//**Keunggulan OOD Detection ini:**
-//
-//✅ **Multi-factor Analysis**: Menganalisis 4 aspek berbeda:
-//   - **Entropy**: Kompleksitas gambar
-//   - **Color Variance**: Variasi warna
-//   - **Circular Pattern**: Pola circular khas mata fundus
-//   - **Red Channel Dominance**: Dominasi channel merah
-//
-//✅ **Scoring System**: Score 0.0 - 1.0 berdasarkan berapa banyak checks yang passed
-//
-//✅ **Detailed Feedback**: Memberikan alasan spesifik kenapa gambar tidak valid
-//
-//✅ **Lebih Robust**: Tidak bergantung pada confidence threshold model saja
-//
-//**Contoh Output:**
-//
-//Untuk gambar non-fundus (misal: foto kucing):
-//```
-//❌ GAMBAR TIDAK VALID (OOD Score: 25.0%)
-//
-//Gambar TIDAK VALID sebagai fundus image:
-//- Variasi warna tidak sesuai dengan mata fundus
-//- Tidak ditemukan pola circular (karakteristik mata)
-//- Dominasi channel merah tidak sesuai fundus image
-//
-//Silakan upload gambar mata fundus yang benar.
