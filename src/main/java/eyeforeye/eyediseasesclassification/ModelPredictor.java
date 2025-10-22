@@ -29,6 +29,12 @@ public class ModelPredictor {
             "Retinis Pigmentosa"
     };
 
+    // Threshold untuk validasi
+    private static final float CONFIDENCE_THRESHOLD = 0.50f; // 50%
+    private static final float LOW_CONFIDENCE_THRESHOLD = 0.30f; // 30%
+    
+    
+
     public ModelPredictor(String modelPath) {
         try {
             System.out.println("🔹 Memuat model TensorFlow dari: " + modelPath);
@@ -41,8 +47,6 @@ public class ModelPredictor {
         }
     }
 
-    
-    //SINGLE
     public String predict(File imageFile) {
         if (model == null) {
             return "❌ Model belum dimuat!";
@@ -56,9 +60,15 @@ public class ModelPredictor {
                 return "❌ Gagal membaca gambar!";
             }
             
+            // Validasi gambar
+            String validationError = validateImage(img);
+            if (validationError != null) {
+                return validationError;
+            }
+            
             BufferedImage resized = resizeImage(img, 224, 224);
             inputTensor = imageToTensorRGB(resized);
-            //SINGLE
+
             Tensor result = model.session()
                     .runner()
                     .feed("serve_keras_tensor", inputTensor)
@@ -75,7 +85,25 @@ public class ModelPredictor {
             
             result.close();
 
-            return String.format("Prediksi: %s\nConfidence: %.2f%%", 
+            // Validasi confidence
+            if (confidence < LOW_CONFIDENCE_THRESHOLD) {
+                return "❌ GAMBAR TIDAK VALID\n\n" +
+                       "Gambar ini kemungkinan besar BUKAN gambar mata fundus.\n" +
+                       "Confidence sangat rendah: " + String.format("%.2f%%", confidence * 100) + "\n\n" +
+                       "Silakan upload gambar mata fundus yang benar.";
+            } else if (confidence < CONFIDENCE_THRESHOLD) {
+                return "⚠️ PREDIKSI TIDAK DAPAT DIANDALKAN\n\n" +
+                       "Prediksi: " + predictedClass + "\n" +
+                       "Confidence: " + String.format("%.2f%%", confidence * 100) + "\n\n" +
+                       "⚠️ Confidence terlalu rendah!\n" +
+                       "Kemungkinan:\n" +
+                       "- Gambar bukan mata fundus yang valid\n" +
+                       "- Kualitas gambar buruk\n" +
+                       "- Pencahayaan tidak sesuai\n\n" +
+                       "Silakan gunakan gambar mata fundus yang lebih jelas.";
+            }
+
+            return String.format("✅ PREDIKSI VALID\n\nPrediksi: %s\nConfidence: %.2f%%", 
                                predictedClass, confidence * 100);
 
         } catch (Exception e) {
@@ -87,8 +115,7 @@ public class ModelPredictor {
             }
         }
     }
-    
-    //BATCH
+
     public BatchResult predictDetailed(File imageFile) {
         if (model == null) {
             return new BatchResult(imageFile, "Model belum dimuat");
@@ -102,9 +129,15 @@ public class ModelPredictor {
                 return new BatchResult(imageFile, "Gagal membaca gambar");
             }
             
+            // Validasi gambar
+            String validationError = validateImage(img);
+            if (validationError != null) {
+                return new BatchResult(imageFile, validationError);
+            }
+            
             BufferedImage resized = resizeImage(img, 224, 224);
             inputTensor = imageToTensorRGB(resized);
-            //BATCH
+
             Tensor result = model.session()
                     .runner()
                     .feed("serve_keras_tensor", inputTensor)
@@ -121,6 +154,15 @@ public class ModelPredictor {
             
             result.close();
 
+            // Validasi confidence
+            if (confidence < LOW_CONFIDENCE_THRESHOLD) {
+                return new BatchResult(imageFile, "TIDAK VALID (Confidence: " + 
+                                     String.format("%.2f%%", confidence * 100) + " - Bukan gambar mata)");
+            } else if (confidence < CONFIDENCE_THRESHOLD) {
+                return new BatchResult(imageFile, predictedClass + " (⚠️ Low Confidence: " + 
+                                     String.format("%.2f%%)", confidence * 100));
+            }
+
             return new BatchResult(imageFile, predictedClass, confidence);
 
         } catch (Exception e) {
@@ -132,6 +174,27 @@ public class ModelPredictor {
             }
         }
     }
+    
+    /**
+     * Validasi awal gambar (misal: dimensi,
+     * apakah gambar terlalu gelap/terang, dll.)
+     *
+     * @param img Gambar yang akan divalidasi
+     * @return String error jika tidak valid, atau null jika valid
+     */
+    private String validateImage(BufferedImage img) {
+        // Implementasi validasi gambar dasar
+        // Model ini mengharapkan gambar mata, yang biasanya tidak super kecil.
+        if (img.getWidth() < 50 || img.getHeight() < 50) {
+            return "❌ GAMBAR TIDAK VALID\n\nResolusi gambar terlalu kecil (< 50x50 pixels).";
+        }
+        
+        // TODO: Validasi yang lebih canggih bisa ditambahkan di sini
+        // (misal: cek histogram untuk gambar yang terlalu gelap/terang)
+        
+        // Lolos validasi dasar
+        return null;
+    }
 
     private static BufferedImage resizeImage(BufferedImage original, int width, int height) {
         BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -142,7 +205,7 @@ public class ModelPredictor {
     private static TFloat32 imageToTensorRGB(BufferedImage img) {
         int width = img.getWidth();
         int height = img.getHeight();
-//        AADDING COMMAND TEST FOR GIT BRACHNDAHUWDH UPFDATE FORF USCK SAKE
+        
         float[] data = new float[height * width * 3];
         
         int index = 0;
@@ -174,6 +237,10 @@ public class ModelPredictor {
             }
         }
         return maxIndex;
+    }
+    
+    public SavedModelBundle getModel() {
+        return model;
     }
 
     public void close() {

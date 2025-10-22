@@ -2,31 +2,84 @@
 
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Separator?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.geometry.Insets?>
 
-<AnchorPane prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="eyeforeye.eyediseasesclassification.MainController">
-    <!--M-->
-    <!-- Container utama -->
-    <VBox alignment="CENTER" spacing="15.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
-          <!--AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" padding="20">-->
+<AnchorPane prefHeight="650.0" prefWidth="900.0" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="eyeforeye.eyediseasesclassification.MainController">
+    
+    <VBox alignment="CENTER" spacing="15.0" AnchorPane.bottomAnchor="10.0" AnchorPane.leftAnchor="10.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="10.0">
 
         <!-- Judul aplikasi -->
         <Label style="-fx-font-size: 20px; -fx-font-weight: bold;" text="Aplikasi Klasifikasi Penyakit Mata" />
 
-        <!-- Area tampilan gambar -->
-        <ImageView fx:id="imageView" fitHeight="250.0" fitWidth="250.0" preserveRatio="true" />
+        <!-- Container untuk gambar dan Grad-CAM -->
+        <HBox spacing="20" alignment="CENTER">
+            <!-- Original Image -->
+            <VBox alignment="CENTER" spacing="5">
+                <Label text="Original Image" style="-fx-font-weight: bold;"/>
+                <ImageView fx:id="imageView" fitHeight="250.0" fitWidth="250.0" preserveRatio="true" 
+                          style="-fx-border-color: #cccccc; -fx-border-width: 2;"/>
+            </VBox>
+            
+            <!-- Grad-CAM Heatmap -->
+            <VBox alignment="CENTER" spacing="5">
+                <Label text="Grad-CAM Heatmap" style="-fx-font-weight: bold;"/>
+                <ImageView fx:id="gradcamImageView" fitHeight="250.0" fitWidth="250.0" preserveRatio="true" 
+                          style="-fx-border-color: #cccccc; -fx-border-width: 2; -fx-background-color: #f0f0f0;"/>
+            </VBox>
+        </HBox>
 
         <!-- Label hasil prediksi -->
-        <Label fx:id="predictionLabel" text="Belum ada gambar yang diunggah." />
+        <Label fx:id="predictionLabel" text="Belum ada gambar yang diunggah." wrapText="true" style="-fx-font-size: 12px;"/>
 
         <!-- Tombol kontrol -->
         <HBox alignment="CENTER" spacing="15">
-            <Button fx:id="uploadButton" onAction="#onUploadClicked" text="Unggah Gambar" />
-            <Button fx:id="predictButton" onAction="#onPredictClicked" text="Prediksi Hasil" />
+            <Button fx:id="uploadButton" onAction="#onUploadClicked" text="📁 Unggah Gambar" prefWidth="150"/>
+            <Button fx:id="predictButton" onAction="#onPredictClicked" text="🔮 Prediksi Hasil" prefWidth="150" style="-fx-background-color: #4CAF50; -fx-text-fill: white;"/>
+            <Button fx:id="showGradCAMButton" onAction="#onShowGradCAMClicked" text="🔥 Show Grad-CAM" prefWidth="150" style="-fx-background-color: #FF5722; -fx-text-fill: white;"/>
         </HBox>
+        
+        <Separator prefWidth="600"/>
+        
+        <!-- Panel Metrics -->
+        <VBox spacing="10" style="-fx-background-color: #f5f5f5; -fx-padding: 15; -fx-border-color: #cccccc; -fx-border-radius: 5;">
+            <Label text="📊 Model Performance Metrics" style="-fx-font-weight: bold; -fx-font-size: 14px;"/>
+            
+            <!-- Grid Metrics -->
+            <HBox spacing="30" alignment="CENTER">
+                <!-- Accuracy -->
+                <VBox alignment="CENTER" spacing="5" style="-fx-background-color: white; -fx-padding: 10; -fx-border-radius: 5; -fx-background-radius: 5;">
+                    <Label text="Accuracy" style="-fx-font-size: 11px; -fx-text-fill: #666666;"/>
+                    <Label fx:id="accuracyLabel" text="0.00%" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #2196F3;"/>
+                </VBox>
+                
+                <!-- Precision -->
+                <VBox alignment="CENTER" spacing="5" style="-fx-background-color: white; -fx-padding: 10; -fx-border-radius: 5; -fx-background-radius: 5;">
+                    <Label text="Precision" style="-fx-font-size: 11px; -fx-text-fill: #666666;"/>
+                    <Label fx:id="precisionLabel" text="0.00%" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #4CAF50;"/>
+                </VBox>
+                
+                <!-- Recall -->
+                <VBox alignment="CENTER" spacing="5" style="-fx-background-color: white; -fx-padding: 10; -fx-border-radius: 5; -fx-background-radius: 5;">
+                    <Label text="Recall" style="-fx-font-size: 11px; -fx-text-fill: #666666;"/>
+                    <Label fx:id="recallLabel" text="0.00%" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #FF9800;"/>
+                </VBox>
+                
+                <!-- F1 Score -->
+                <VBox alignment="CENTER" spacing="5" style="-fx-background-color: white; -fx-padding: 10; -fx-border-radius: 5; -fx-background-radius: 5;">
+                    <Label text="F1 Score" style="-fx-font-size: 11px; -fx-text-fill: #666666;"/>
+                    <Label fx:id="f1Label" text="0.00%" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #9C27B0;"/>
+                </VBox>
+            </HBox>
+            
+            <!-- Info Note -->
+            <Label text="ℹ️ Metrics dihitung berdasarkan confidence score prediksi. Untuk metrics akurat, gunakan test dataset dengan ground truth labels." 
+                   wrapText="true" style="-fx-font-size: 10px; -fx-text-fill: #888888;"/>
+        </VBox>
 
     </VBox>
 </AnchorPane>

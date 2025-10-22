@@ -35,7 +35,7 @@ public class App extends Application {
         
         tabPane.getTabs().addAll(singleTab, batchTab);
         
-        Scene scene = new Scene(tabPane, 900, 600);
+        Scene scene = new Scene(tabPane, 900, 750);
         
         stage.setTitle("Aplikasi Klasifikasi Penyakit Mata");
         stage.setScene(scene);

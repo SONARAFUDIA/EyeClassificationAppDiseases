@@ -1,5 +1,6 @@
 eyeforeye\eyediseasesclassification\BatchController.class
 eyeforeye\eyediseasesclassification\BatchResult.class
 eyeforeye\eyediseasesclassification\ModelPredictor.class
+eyeforeye\eyediseasesclassification\GradCAMGenerator.class
 eyeforeye\eyediseasesclassification\MainController.class
 eyeforeye\eyediseasesclassification\App.class
