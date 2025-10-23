@@ -28,6 +28,10 @@ public class ModelPredictor {
             "Retinal Detachment",
             "Retinis Pigmentosa"
     };
+    
+    public static String[] getClasses() {
+        return CLASSES;
+    }
 
     public ModelPredictor(String modelPath) {
         try {
@@ -76,7 +80,7 @@ public class ModelPredictor {
 
             Tensor result = model.session()
                     .runner()
-                    .feed("serve_keras_tensor", inputTensor)
+                    .feed("serve_input_layer", inputTensor)
                     .fetch("StatefulPartitionedCall")
                     .run()
                     .get(0);
