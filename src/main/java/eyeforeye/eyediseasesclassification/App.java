@@ -7,18 +7,14 @@ import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.stage.Stage;
 
-/**
- * JavaFX App - Aplikasi Klasifikasi Penyakit Mata
- * Non-modular version (tanpa module-info.java)
- */
 public class App extends Application {
 
     private MainController singleController;
     private BatchController batchController;
+    private EvaluationController evalController; // <-- TAMBAHKAN INI
 
     @Override
     public void start(Stage stage) throws Exception {
-        // Create TabPane
         TabPane tabPane = new TabPane();
         
         // Tab 1: Single Prediction
@@ -33,14 +29,20 @@ public class App extends Application {
         batchTab.setClosable(false);
         batchController = batchLoader.getController();
         
-        tabPane.getTabs().addAll(singleTab, batchTab);
+        // Tab 3: Model Evaluation (BARU)
+        FXMLLoader evalLoader = new FXMLLoader(getClass().getResource("evaluation-view.fxml"));
+        Tab evalTab = new Tab("Model Evaluation", evalLoader.load());
+        evalTab.setClosable(false);
+        evalController = evalLoader.getController();
+        
+        // Tambahkan semua tab
+        tabPane.getTabs().addAll(singleTab, batchTab, evalTab); // <-- TAMBAHKAN evalTab
         
         Scene scene = new Scene(tabPane, 900, 750);
         
         stage.setTitle("Aplikasi Klasifikasi Penyakit Mata");
         stage.setScene(scene);
         
-        // Event handler untuk cleanup saat window ditutup
         stage.setOnCloseRequest(event -> {
             cleanup();
         });
@@ -60,9 +62,12 @@ public class App extends Application {
         if (batchController != null) {
             batchController.cleanup();
         }
+        if (evalController != null) { // <-- TAMBAHKAN INI
+            evalController.cleanup();
+        }
     }
 
     public static void main(String[] args) {
         launch();
     }
-}   
+}
